@@ -12,14 +12,30 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 // Initialize Firebase & Database
-try {
-  initializeFirebase();
-  pool.query("SELECT NOW()");
-  console.log("✓ Firebase & Database initialized");
-} catch (error) {
-  console.error("✗ Initialization failed:", error.message);
-  process.exit(1);
-}
+const startupChecks = async () => {
+  // Check Firebase initialization
+  try {
+    initializeFirebase();
+  } catch (error) {
+    console.error("✗ Firebase initialization failed:", error.message);
+    process.exit(1);
+  }
+
+  // Check database connectivity
+  try {
+    await pool.query("SELECT NOW()");
+  } catch (error) {
+    console.error("✗ Database connection failed:", error.message);
+    process.exit(1);
+  }
+
+  // If both passed:
+  console.log("✓ Firebase initialized");
+  console.log("✓ Database connected");
+  console.log("🚀 Auth Service is starting up...");
+};
+
+startupChecks();
 
 // Middleware
 app.use(cors({ origin: process.env.CORS_ORIGIN || "*" }));
