@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Auth Service Test</title>
+    <style>
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+          Helvetica, Arial, sans-serif;
+        margin: 2rem;
+        background-color: #f4f4f9;
+        color: #333;
+      }
+      .container {
+        max-width: 800px;
+        margin: 0 auto;
+        padding: 2rem;
+        background-color: #fff;
+        border-radius: 8px;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+      }
+      h1,
+      h2 {
+        color: #1a1a1a;
+      }
+      button {
+        padding: 0.8rem 1.2rem;
+        border: none;
+        border-radius: 4px;
+        background-color: #007bff;
+        color: white;
+        font-size: 1rem;
+        cursor: pointer;
+        transition: background-color 0.2s;
+      }
+      button:hover {
+        background-color: #0056b3;
+      }
+      button#googleSignInBtn {
+        background-color: #db4437;
+      }
+      button#googleSignInBtn:hover {
+        background-color: #c23321;
+      }
+      button#logoutBtn,
+      button#getProfileBtn {
+        background-color: #6c757d;
+        margin-top: 1rem;
+      }
+      button#logoutBtn:hover,
+      button#getProfileBtn:hover {
+        background-color: #5a6268;
+      }
+      pre {
+        background-color: #e9ecef;
+        padding: 1rem;
+        border-radius: 4px;
+        white-space: pre-wrap;
+        word-wrap: break-word;
+        font-family: "SF Mono", "Fira Code", "Fira Mono", "Roboto Mono",
+          monospace;
+      }
+      #userInfo,
+      #auth-container {
+        display: none;
+      }
+      #error {
+        color: #dc3545;
+        margin-top: 1rem;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <h1>Auth Service Test Page</h1>
+
+      <!-- Login Button -->
+      <div id="login-container">
+        <h2>Login</h2>
+        <p>Click the button below to sign in with your Google account.</p>
+        <button id="googleSignInBtn">Sign in with Google</button>
+        <div id="error"></div>
+      </div>
+
+      <!-- Authenticated Content -->
+      <div id="auth-container">
+        <h2>Authenticated!</h2>
+        <div id="userInfo"></div>
+        <button id="getProfileBtn">Fetch My Profile (/auth/me)</button>
+        <button id="logoutBtn">Logout</button>
+      </div>
+
+      <!-- Debug Output -->
+      <h2>Debug Info</h2>
+      <pre id="output">Waiting for action...</pre>
+    </div>
+
+    <!-- Firebase SDK -->
+    <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+
+    <script>
+      // =================================================================================
+      // IMPORTANT: PASTE YOUR FIREBASE CONFIGURATION HERE
+      // =================================================================================
+      const firebaseConfig = {
+        apiKey: "AIzaSyD8XcMN9RtZ11MYeWUurXzHqA60XhXGtY8",
+        authDomain: "gdg-babcock.firebaseapp.com",
+        projectId: "gdg-babcock",
+        storageBucket: "gdg-babcock.firebasestorage.app",
+        messagingSenderId: "568263421104",
+        appId: "1:568263421104:web:ff3f87d321e65e404d5f75",
+        measurementId: "G-M4L525KBDD",
+      };
+
+      // --- DO NOT EDIT BELOW THIS LINE ---
+
+      firebase.initializeApp(firebaseConfig);
+      const fbAuth = firebase.auth();
+      const AUTH_API_URL = "http://localhost:3000";
+
+      const loginContainer = document.getElementById("login-container");
+      const authContainer = document.getElementById("auth-container");
+      const googleSignInBtn = document.getElementById("googleSignInBtn");
+      const logoutBtn = document.getElementById("logoutBtn");
+      const getProfileBtn = document.getElementById("getProfileBtn");
+      const output = document.getElementById("output");
+      const errorDiv = document.getElementById("error");
+      const userInfoDiv = document.getElementById("userInfo");
+
+      function log(title, data) {
+        console.log(title, data);
+        output.textContent = `${title}:\n${JSON.stringify(data, null, 2)}`;
+      }
+
+      function showError(message) {
+        console.error(message);
+        errorDiv.textContent = message;
+      }
+
+      function updateUI(isAuthenticated) {
+        loginContainer.style.display = isAuthenticated ? "none" : "block";
+        authContainer.style.display = isAuthenticated ? "block" : "none";
+      }
+
+      // 1. LOGIN WITH GOOGLE
+      googleSignInBtn.addEventListener("click", async () => {
+        errorDiv.textContent = "";
+        try {
+          log("Step 1: Signing in with Google via Firebase...", {});
+          const provider = new firebase.auth.GoogleAuthProvider();
+          const userCredential = await fbAuth.signInWithPopup(provider);
+          log("Google Sign-In Success", userCredential.user.toJSON());
+
+          log("Step 2: Getting Firebase ID Token...", {});
+          const firebaseToken = await userCredential.user.getIdToken();
+          log("Got Firebase Token", {
+            token: firebaseToken.substring(0, 30) + "...",
+          });
+
+          log("Step 3: Exchanging token with our Auth Service...", {
+            url: `${AUTH_API_URL}/auth/login`,
+          });
+          const response = await fetch(`${AUTH_API_URL}/auth/login`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ firebase_token: firebaseToken }),
+          });
+
+          if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.error || "Login to Auth Service failed");
+          }
+
+          const data = await response.json();
+          log("Auth Service Login Success!", data);
+
+          localStorage.setItem("access_token", data.tokens.access_token);
+          localStorage.setItem("refresh_token", data.tokens.refresh_token);
+          log("Tokens stored in localStorage", {});
+
+          updateUI(true);
+        } catch (error) {
+          showError(`Login Failed: ${error.message}`);
+        }
+      });
+
+      // 2. GET PROFILE
+      getProfileBtn.addEventListener("click", async () => {
+        const accessToken = localStorage.getItem("access_token");
+        if (!accessToken) {
+          showError("No access token found. Please log in.");
+          return;
+        }
+        try {
+          log("Fetching profile with Access Token...", {
+            url: `${AUTH_API_URL}/auth/me`,
+          });
+          const response = await fetch(`${AUTH_API_URL}/auth/me`, {
+            headers: { Authorization: `Bearer ${accessToken}` },
+          });
+          if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.error || "Failed to fetch profile");
+          }
+          const profile = await response.json();
+          log("Profile fetch successful!", profile);
+          userInfoDiv.innerHTML = `<h3>Welcome, ${profile.user.full_name}</h3><p>Email: ${profile.user.email}</p><p>Your ID: ${profile.user.id}</p>`;
+          userInfoDiv.style.display = "block";
+        } catch (error) {
+          showError(`Error fetching profile: ${error.message}`);
+        }
+      });
+
+      // 3. LOGOUT
+      logoutBtn.addEventListener("click", async () => {
+        log("Logging out...", {});
+        const accessToken = localStorage.getItem("access_token");
+        const refreshToken = localStorage.getItem("refresh_token");
+        try {
+          await fetch(`${AUTH_API_URL}/auth/logout`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${accessToken}`,
+            },
+            body: JSON.stringify({ refresh_token: refreshToken }),
+          });
+          log("Logged out from Auth Service", {});
+        } catch (error) {
+          console.warn(
+            "Logout from auth service failed, continuing...",
+            error.message
+          );
+        }
+        await fbAuth.signOut();
+        localStorage.removeItem("access_token");
+        localStorage.removeItem("refresh_token");
+        log("Tokens cleared and Firebase session ended.", {});
+        updateUI(false);
+        userInfoDiv.style.display = "none";
+      });
+
+      // Check initial state on page load
+      if (localStorage.getItem("access_token")) {
+        updateUI(true);
+        output.textContent =
+          'Already logged in. Click "Fetch My Profile" to get user data.';
+      } else {
+        updateUI(false);
+      }
+    </script>
+  </body>
+</html>
