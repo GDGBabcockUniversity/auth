@@ -5,7 +5,7 @@ const { generateAccessToken, generateRefreshToken } = require("../utils/jwt");
 const crypto = require("crypto");
 
 /**
- * Auth Service - Business logic for authentication
+ * Auth Service - Business logic for authentication (Simplified)
  */
 class AuthService {
   /**
@@ -26,7 +26,6 @@ class AuthService {
         name,
         picture: avatarUrl,
         email_verified: emailVerified,
-        phone_number: whatsappNumber,
       } = decodedToken;
 
       // Find or create user in our database
@@ -37,36 +36,14 @@ class AuthService {
         user = await UserModel.create({
           firebaseUid,
           email,
-          fullName: name || email.split("@")[0],
+          fullName: name,
           avatarUrl,
-          emailVerified: emailVerified || false,
-          whatsappNumber,
+          emailVerified,
         });
-
-        // Log user creation
-        await this.logAuthEvent(
-          user.id,
-          "user_created",
-          {
-            firebase_uid: firebaseUid,
-            email,
-          },
-          metadata
-        );
       } else {
         // Update last login
         await UserModel.updateLastLogin(user.id);
       }
-
-      // Log login event
-      await this.logAuthEvent(
-        user.id,
-        "login",
-        {
-          method: "firebase",
-        },
-        metadata
-      );
 
       // Generate our own JWT tokens
       const accessToken = generateAccessToken({
@@ -74,9 +51,7 @@ class AuthService {
         email: user.email,
         full_name: user.full_name,
         roles: user.roles,
-        teams: user.teams || [],
-        primary_track: user.primary_track,
-        student_status: user.student_status,
+        teams: user.teams,
       });
 
       const refreshToken = generateRefreshToken({
@@ -94,14 +69,8 @@ class AuthService {
           email: user.email,
           full_name: user.full_name,
           avatar_url: user.avatar_url,
-          whatsapp_number: user.whatsapp_number,
-          email_verified: user.email_verified,
-          student_status: user.student_status,
-          primary_track: user.primary_track,
-          secondary_track: user.secondary_track,
-          teams: user.teams || [],
           roles: user.roles,
-          tos_agreed: user.tos_agreed,
+          teams: user.teams,
         },
         tokens: {
           access_token: accessToken,
@@ -135,7 +104,7 @@ class AuthService {
 
       // Check if refresh token exists and is active in database
       const tokenResult = await query(
-        `SELECT rt.*, u.email, u.full_name, u.roles, u.teams, u.primary_track, u.student_status
+        `SELECT rt.*, u.email, u.full_name, u.roles, u.teams
          FROM refresh_tokens rt
          JOIN users u ON rt.user_id = u.id
          WHERE rt.token_hash = $1 AND rt.is_active = TRUE AND rt.expires_at > CURRENT_TIMESTAMP`,
@@ -154,9 +123,7 @@ class AuthService {
         email: tokenData.email,
         full_name: tokenData.full_name,
         roles: tokenData.roles,
-        teams: tokenData.teams || [],
-        primary_track: tokenData.primary_track,
-        student_status: tokenData.student_status,
+        teams: tokenData.teams,
       });
 
       return {
@@ -197,9 +164,6 @@ class AuthService {
         );
       }
 
-      // Log logout event
-      await this.logAuthEvent(userId, "logout", {});
-
       return { success: true, message: "Logged out successfully" };
     } catch (error) {
       throw new Error("Logout failed: " + error.message);
@@ -230,51 +194,6 @@ class AuthService {
    */
   static hashToken(token) {
     return crypto.createHash("sha256").update(token).digest("hex");
-  }
-
-  /**
-   * Log authentication event to audit log
-   * @param {string} userId - User ID
-   * @param {string} eventType - Type of event
-   * @param {Object} eventData - Additional event data
-   * @param {Object} metadata - Request metadata
-   */
-  static async logAuthEvent(userId, eventType, eventData = {}, metadata = {}) {
-    try {
-      await query(
-        `INSERT INTO auth_audit_log (user_id, event_type, event_data, ip_address, user_agent)
-         VALUES ($1, $2, $3, $4, $5)`,
-        [
-          userId,
-          eventType,
-          JSON.stringify(eventData),
-          metadata.ip,
-          metadata.userAgent,
-        ]
-      );
-    } catch (error) {
-      console.error("Failed to log auth event:", error);
-      // Don't throw - logging failures shouldn't break auth flow
-    }
-  }
-
-  /**
-   * Verify user's Firebase token is still valid
-   * @param {string} userId - User ID
-   * @returns {boolean} True if Firebase token is valid
-   */
-  static async verifyFirebaseUser(userId) {
-    try {
-      const user = await UserModel.findById(userId);
-      if (!user) return false;
-
-      // Check if user still exists in Firebase
-      await admin.auth().getUser(user.firebase_uid);
-      return true;
-    } catch (error) {
-      console.error("Firebase user verification failed:", error);
-      return false;
-    }
   }
 }
 

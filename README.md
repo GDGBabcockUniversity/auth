@@ -1,467 +1,174 @@
-# Auth Service - Firebase SSO
+# Auth Service - Firebase SSO (Simplified)
 
-Central authentication service for your platform using Firebase as the identity provider. This service provides single sign-on (SSO) capabilities across all your platform services.
+This is a simplified, production-ready authentication service that uses Firebase as an identity provider. It provides a central auth hub for your platform, issuing its own JWTs so that your other services don't need to interact with Firebase directly.
 
-## 🏗️ Architecture
+This streamlined version focuses on the core functionality: login, token management, and profile updates.
 
-```
-┌─────────────────────────────────────────┐
-│   Auth Service (This Backend)          │
-│   - Wraps Firebase Auth                 │
-│   - Central user profiles DB            │
-│   - Issues your own JWTs                │
-│   - Syncs with Firebase                 │
-└─────────────────────────────────────────┘
-          │
-          │ JWT with user_id
-          ▼
-    All Other Services
-    (Just validate JWT, never touch Firebase)
-```
+## ✨ Core Features
 
-## ✨ Features
+- **Firebase Integration**: Securely validates users via Firebase.
+- **Central User Database**: Stores user profiles in your own PostgreSQL database.
+- **JWT Token Management**: Issues, refreshes, and validates your platform's own JWTs.
+- **Profile Management**: Endpoints for users to view and update their profile.
+- **Role-Based Access**: Supports user roles in the JWT for authorization in other services.
+- **GDG-Specific Schema**: Includes fields tailored for GDG Babcock members.
 
-- **Firebase Integration**: Secure authentication via Firebase Auth
-- **Central User Database**: Single source of truth for user data
-- **JWT Token Management**: Issue and validate JWT tokens with custom claims
-- **Role-Based Access Control**: Support for user roles (admin, moderator, user)
-- **GDG Member Tracking**: Custom field for GDG Babcock membership
-- **Refresh Token Support**: Long-lived refresh tokens for token rotation
-- **Audit Logging**: Track authentication events for security
-- **Admin API**: Manage users, roles, and permissions
+## 🚀 Setup Guide (Vercel + Neon)
 
-## 🚀 Getting Started
+This guide is optimized for deploying to Vercel with a Neon database.
 
-### Prerequisites
+### 1. Local Setup
 
-- Node.js (v14 or higher)
-- PostgreSQL (v12 or higher)
-- Firebase project with Admin SDK credentials
-
-### Installation
-
-1. **Clone and install dependencies**
+**A. Install Dependencies:**
 
 ```bash
 npm install
 ```
 
-2. **Set up PostgreSQL database**
+**B. Set up PostgreSQL:**
 
-```bash
-# Create database
-createdb auth_db
+- Install PostgreSQL locally.
+- Create a database:
+  ```bash
+  createdb auth_db
+  ```
+- Run the schema migration:
+  ```bash
+  psql -d auth_db -f database/schema.sql
+  ```
 
-# Run schema migration
-psql -d auth_db -f database/schema.sql
+**C. Create `.env` file:**
+Create a file named `.env` and fill it with your local credentials.
+
+```env
+# Server
+PORT=3000
+NODE_ENV=development
+CORS_ORIGIN=*
+
+# JWT (generate one for local testing)
+JWT_SECRET=your-super-secret-jwt-key-for-local-dev
+
+# Firebase (for local dev)
+FIREBASE_SERVICE_ACCOUNT_PATH=./firebase-service-account.json
+FIREBASE_PROJECT_ID=your-firebase-project-id
+
+# Local Database
+DB_HOST=localhost
+DB_PORT=5432
+DB_NAME=auth_db
+DB_USER=postgres
+DB_PASSWORD=your-local-db-password
 ```
 
-3. **Configure environment variables**
+**D. Get Firebase Credentials:**
+
+- Go to your **Firebase Project Settings → Service Accounts**.
+- Click **"Generate new private key"**.
+- Save the downloaded file as `firebase-service-account.json` in your project root.
+
+**E. Run the server:**
 
 ```bash
-# Copy example env file
-cp .env.example .env
-
-# Edit .env with your values
-```
-
-4. **Set up Firebase**
-
-   - Go to [Firebase Console](https://console.firebase.google.com/)
-   - Create a project or use existing one
-   - Go to Project Settings > Service Accounts
-   - Generate new private key
-   - Save as `firebase-service-account.json` in project root
-   - Update `FIREBASE_PROJECT_ID` in `.env`
-
-5. **Start the server**
-
-```bash
-# Development mode with auto-reload
 npm run dev
-
-# Production mode
-npm start
 ```
+
+### 2. Vercel Deployment
+
+**A. Create a `vercel.json` file:**
+Create a file named `vercel.json` in your project root. This tells Vercel how to run your server.
+
+```json
+{
+  "version": 2,
+  "builds": [
+    {
+      "src": "app.js",
+      "use": "@vercel/node"
+    }
+  ],
+  "routes": [
+    {
+      "src": "/(.*)",
+      "dest": "app.js"
+    }
+  ]
+}
+```
+
+**B. Set Up a Neon Database:**
+
+- Go to [neon.tech](https://neon.tech) and create a free PostgreSQL database.
+- Find the **Connection String** for your new database.
+
+**C. Configure Vercel Environment Variables:**
+
+- Go to your Vercel project **Settings → Environment Variables**.
+- Add the following secrets:
+
+| Variable Name              | How to Get the Value                                                                                        |
+| :------------------------- | :---------------------------------------------------------------------------------------------------------- |
+| `DATABASE_URL`             | Your Neon connection string. **IMPORTANT:** Add `?sslmode=require` to the end.                              |
+| `FIREBASE_SERVICE_ACCOUNT` | In your terminal, run `cat firebase-service-account.json \| tr -d '\n'` and paste the output.               |
+| `FIREBASE_PROJECT_ID`      | Copy the `project_id` from your `firebase-service-account.json` file.                                       |
+| `JWT_SECRET`               | Run `node -e "console.log(require('crypto').randomBytes(64).toString('hex'))"` to generate a secure secret. |
+| `CORS_ORIGIN`              | The URL of your deployed frontend (e.g., `https://your-app.vercel.app`).                                    |
+| `NODE_ENV`                 | `production`                                                                                                |
+
+**D. Deploy:**
+
+- Push your code to GitHub. Vercel will build and deploy it.
+
+**E. Run Production Database Migration:**
+
+- In the Neon dashboard, find the PSQL command to connect.
+- Run it from your terminal with the schema file:
+  ```bash
+  psql "YOUR_NEON_CONNECTION_STRING" -f database/schema.sql
+  ```
 
 ## 📡 API Endpoints
 
-### Authentication Endpoints
+- `POST /auth/login`: Exchange a Firebase token for a platform JWT.
+- `POST /auth/refresh`: Get a new access token using a refresh token.
+- `POST /auth/logout`: Revoke a refresh token.
+- `GET /auth/me`: Get the current user's profile.
+- `PUT /auth/profile`: Update the current user's profile.
+- `GET /auth/verify`: Check if the current JWT is valid.
+- `GET /health`: Health check endpoint.
 
-#### POST `/auth/login`
-
-Login with Firebase token
-
-**Request:**
-
-```json
-{
-  "firebase_token": "eyJhbGciOiJSUzI1NiIs..."
-}
-```
-
-**Response:**
-
-```json
-{
-  "success": true,
-  "user": {
-    "id": "uuid",
-    "email": "user@example.com",
-    "name": "John Doe",
-    "gdg_member": false,
-    "roles": ["user"]
-  },
-  "tokens": {
-    "access_token": "eyJhbGciOiJIUzI1NiIs...",
-    "refresh_token": "eyJhbGciOiJIUzI1NiIs...",
-    "token_type": "Bearer",
-    "expires_in": 86400
-  }
-}
-```
-
-#### POST `/auth/refresh`
-
-Refresh access token
-
-**Request:**
-
-```json
-{
-  "refresh_token": "eyJhbGciOiJIUzI1NiIs..."
-}
-```
-
-**Response:**
-
-```json
-{
-  "success": true,
-  "tokens": {
-    "access_token": "eyJhbGciOiJIUzI1NiIs...",
-    "token_type": "Bearer",
-    "expires_in": 86400
-  }
-}
-```
-
-#### POST `/auth/logout`
-
-Logout and revoke refresh token (requires authentication)
-
-**Headers:**
-
-```
-Authorization: Bearer <access_token>
-```
-
-**Request:**
-
-```json
-{
-  "refresh_token": "eyJhbGciOiJIUzI1NiIs..."
-}
-```
-
-#### GET `/auth/me`
-
-Get current user profile (requires authentication)
-
-**Headers:**
-
-```
-Authorization: Bearer <access_token>
-```
-
-**Response:**
-
-```json
-{
-  "success": true,
-  "user": {
-    "id": "uuid",
-    "email": "user@example.com",
-    "name": "John Doe",
-    "display_name": "John",
-    "photo_url": "https://...",
-    "email_verified": true,
-    "gdg_member": true,
-    "roles": ["user", "gdg_member"],
-    "created_at": "2024-01-01T00:00:00Z",
-    "last_login_at": "2024-01-15T12:00:00Z"
-  }
-}
-```
-
-#### PUT `/auth/profile`
-
-Update user profile (requires authentication)
-
-**Headers:**
-
-```
-Authorization: Bearer <access_token>
-```
-
-**Request:**
-
-```json
-{
-  "name": "John Smith",
-  "display_name": "Johnny",
-  "phone_number": "+1234567890"
-}
-```
-
-#### GET `/auth/verify`
-
-Verify token validity (requires authentication)
-
-**Headers:**
-
-```
-Authorization: Bearer <access_token>
-```
-
-**Response:**
-
-```json
-{
-  "success": true,
-  "valid": true,
-  "user": {
-    "user_id": "uuid",
-    "email": "user@example.com",
-    "roles": ["user"]
-  }
-}
-```
-
-### Admin Endpoints
-
-All admin endpoints require authentication and admin role.
-
-#### GET `/admin/users/:userId`
-
-Get user by ID
-
-#### PUT `/admin/users/:userId/gdg-member`
-
-Set user's GDG member status
-
-**Request:**
-
-```json
-{
-  "gdg_member": true
-}
-```
-
-#### POST `/admin/users/:userId/roles`
-
-Add role to user
-
-**Request:**
-
-```json
-{
-  "role": "moderator"
-}
-```
-
-#### DELETE `/admin/users/:userId/roles/:role`
-
-Remove role from user
-
-### Health Check
-
-#### GET `/health`
-
-Check service health
-
-**Response:**
-
-```json
-{
-  "success": true,
-  "service": "auth-service",
-  "status": "healthy",
-  "timestamp": "2024-01-15T12:00:00Z"
-}
-```
-
-## 🔐 JWT Token Structure
-
-Access tokens contain the following claims:
-
-```json
-{
-  "user_id": "uuid",
-  "email": "user@example.com",
-  "name": "John Doe",
-  "roles": ["user", "admin"],
-  "gdg_member": true,
-  "iss": "auth-service",
-  "aud": "platform-services",
-  "exp": 1234567890,
-  "iat": 1234567890
-}
-```
-
-## 🔒 Using Auth in Other Services
-
-Other services should **NEVER** talk to Firebase directly. Instead, they validate the JWT tokens issued by this service.
-
-### Example Middleware (Express)
+## Frontend Integration Example
 
 ```javascript
-const jwt = require("jsonwebtoken");
-
-const authenticateToken = (req, res, next) => {
-  const authHeader = req.headers["authorization"];
-  const token = authHeader && authHeader.split(" ")[1];
-
-  if (!token) {
-    return res.status(401).json({ error: "No token provided" });
-  }
-
-  try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    req.user = decoded;
-    next();
-  } catch (error) {
-    return res.status(403).json({ error: "Invalid token" });
-  }
-};
-
-// Use in routes
-app.get("/protected", authenticateToken, (req, res) => {
-  res.json({ user_id: req.user.user_id });
-});
-```
-
-### Example: Check GDG Member Status
-
-```javascript
-app.get("/gdg-only", authenticateToken, (req, res) => {
-  if (!req.user.gdg_member) {
-    return res.status(403).json({ error: "GDG membership required" });
-  }
-
-  res.json({ message: "Welcome GDG member!" });
-});
-```
-
-### Example: Check User Roles
-
-```javascript
-const requireRole = (role) => {
-  return (req, res, next) => {
-    if (!req.user.roles.includes(role)) {
-      return res.status(403).json({ error: `${role} role required` });
-    }
-    next();
-  };
-};
-
-app.get("/admin-only", authenticateToken, requireRole("admin"), (req, res) => {
-  res.json({ message: "Admin access granted" });
-});
-```
-
-## 🧪 Testing the Service
-
-### 1. Test with Firebase (Frontend)
-
-```javascript
-// In your frontend
 import { signInWithEmailAndPassword, getIdToken } from "firebase/auth";
+import { auth as firebaseAuth } from "./firebase-config"; // Your Firebase client config
 
-// Sign in with Firebase
-const userCredential = await signInWithEmailAndPassword(auth, email, password);
-const firebaseToken = await getIdToken(userCredential.user);
+const AUTH_API_URL = "https://your-auth-service.vercel.app";
 
-// Login to your Auth Service
-const response = await fetch("http://localhost:3000/auth/login", {
-  method: "POST",
-  headers: { "Content-Type": "application/json" },
-  body: JSON.stringify({ firebase_token: firebaseToken }),
-});
+async function login(email, password) {
+  // 1. Authenticate with Firebase client-side
+  const userCredential = await signInWithEmailAndPassword(
+    firebaseAuth,
+    email,
+    password
+  );
 
-const { user, tokens } = await response.json();
+  // 2. Get the Firebase ID token
+  const firebaseToken = await getIdToken(userCredential.user);
 
-// Use access_token for subsequent requests
-localStorage.setItem("access_token", tokens.access_token);
-localStorage.setItem("refresh_token", tokens.refresh_token);
+  // 3. Exchange the Firebase token for your platform's JWT
+  const response = await fetch(`${AUTH_API_URL}/auth/login`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ firebase_token: firebaseToken }),
+  });
+
+  const { tokens, user } = await response.json();
+
+  // 4. Store your tokens and use them for API requests
+  localStorage.setItem("access_token", tokens.access_token);
+  localStorage.setItem("refresh_token", tokens.refresh_token);
+
+  return user;
+}
 ```
-
-### 2. Test with cURL
-
-```bash
-# Login (you need a valid Firebase token)
-curl -X POST http://localhost:3000/auth/login \
-  -H "Content-Type: application/json" \
-  -d '{"firebase_token": "YOUR_FIREBASE_TOKEN"}'
-
-# Get profile
-curl http://localhost:3000/auth/me \
-  -H "Authorization: Bearer YOUR_ACCESS_TOKEN"
-
-# Verify token
-curl http://localhost:3000/auth/verify \
-  -H "Authorization: Bearer YOUR_ACCESS_TOKEN"
-```
-
-## 📊 Database Schema
-
-The service uses the following tables:
-
-- **users**: Central user storage
-- **refresh_tokens**: Active refresh tokens
-- **user_sessions**: Optional session tracking
-- **auth_audit_log**: Authentication event logging
-
-See `database/schema.sql` for complete schema.
-
-## 🔧 Configuration
-
-### Environment Variables
-
-| Variable                        | Description                  | Default              |
-| ------------------------------- | ---------------------------- | -------------------- |
-| `PORT`                          | Server port                  | `3000`               |
-| `NODE_ENV`                      | Environment                  | `development`        |
-| `JWT_SECRET`                    | Secret for signing JWTs      | _(required)_         |
-| `JWT_EXPIRES_IN`                | Access token expiry          | `24h`                |
-| `REFRESH_TOKEN_EXPIRES_IN`      | Refresh token expiry         | `7d`                 |
-| `FIREBASE_PROJECT_ID`           | Firebase project ID          | _(required)_         |
-| `FIREBASE_SERVICE_ACCOUNT_PATH` | Path to service account JSON | _(required for dev)_ |
-| `DB_HOST`                       | PostgreSQL host              | `localhost`          |
-| `DB_PORT`                       | PostgreSQL port              | `5432`               |
-| `DB_NAME`                       | Database name                | `auth_db`            |
-| `DB_USER`                       | Database user                | `postgres`           |
-| `DB_PASSWORD`                   | Database password            | _(required)_         |
-| `CORS_ORIGIN`                   | CORS allowed origins         | `*`                  |
-
-## 🛡️ Security Best Practices
-
-1. **Never commit** `firebase-service-account.json` or `.env` files
-2. **Use strong JWT secrets** in production
-3. **Enable HTTPS** in production (set `CORS_ORIGIN` appropriately)
-4. **Rotate secrets** regularly
-5. **Monitor audit logs** for suspicious activity
-6. **Set up rate limiting** for auth endpoints
-7. **Use environment-specific** Firebase projects
-
-## 📝 License
-
-ISC
-
-## 👥 Contributing
-
-This is a GDG Babcock University project.
-
-## 📞 Support
-
-For issues or questions, please open an issue on the GitHub repository.
