@@ -56,4 +56,40 @@ router.put("/profile", authenticateToken, AuthController.updateProfile);
  */
 router.get("/verify", authenticateToken, AuthController.verifyToken);
 
+/**
+ * @route   POST /auth/tos/agree
+ * @desc    Record user's agreement to Terms of Service
+ * @access  Protected
+ * @body    { version: string }
+ * @returns { success: true }
+ */
+router.post("/tos/agree", authenticateToken, async (req, res) => {
+  try {
+    const { version } = req.body;
+    const userId = req.user.user_id;
+
+    if (!version) {
+      return res.status(400).json({
+        success: false,
+        error: "version is required",
+      });
+    }
+
+    const UserModel = require("../models/userModel");
+    await UserModel.recordTOSAgreement(userId, version);
+
+    res.json({
+      success: true,
+      message: "TOS agreement recorded",
+    });
+  } catch (error) {
+    console.error("TOS agreement error:", error);
+    res.status(500).json({
+      success: false,
+      error: "Failed to record TOS agreement",
+      message: error.message,
+    });
+  }
+});
+
 module.exports = router;

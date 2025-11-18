@@ -130,4 +130,129 @@ router.delete("/users/:userId/roles/:role", async (req, res) => {
   }
 });
 
+/**
+ * @route   POST /admin/users/:userId/teams
+ * @desc    Add team to user
+ * @access  Admin only
+ * @body    { team: string }
+ */
+router.post("/users/:userId/teams", async (req, res) => {
+  try {
+    const { team } = req.body;
+
+    if (!team) {
+      return res.status(400).json({
+        success: false,
+        error: "team is required",
+      });
+    }
+
+    await UserModel.addTeam(req.params.userId, team);
+
+    res.json({
+      success: true,
+      message: `Team '${team}' added successfully`,
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: "Failed to add team",
+      message: error.message,
+    });
+  }
+});
+
+/**
+ * @route   DELETE /admin/users/:userId/teams/:team
+ * @desc    Remove team from user
+ * @access  Admin only
+ */
+router.delete("/users/:userId/teams/:team", async (req, res) => {
+  try {
+    await UserModel.removeTeam(req.params.userId, req.params.team);
+
+    res.json({
+      success: true,
+      message: `Team '${req.params.team}' removed successfully`,
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: "Failed to remove team",
+      message: error.message,
+    });
+  }
+});
+
+/**
+ * @route   GET /admin/tracks/:track/users
+ * @desc    Get users by track
+ * @access  Admin only
+ */
+router.get("/tracks/:track/users", async (req, res) => {
+  try {
+    const users = await UserModel.getUsersByTrack(req.params.track);
+
+    res.json({
+      success: true,
+      count: users.length,
+      users,
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: "Failed to fetch users",
+      message: error.message,
+    });
+  }
+});
+
+/**
+ * @route   GET /admin/teams/:team/users
+ * @desc    Get users by team
+ * @access  Admin only
+ */
+router.get("/teams/:team/users", async (req, res) => {
+  try {
+    const users = await UserModel.getUsersByTeam(req.params.team);
+
+    res.json({
+      success: true,
+      count: users.length,
+      users,
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: "Failed to fetch users",
+      message: error.message,
+    });
+  }
+});
+
+/**
+ * @route   GET /admin/departments/:department/students
+ * @desc    Get students by department
+ * @access  Admin only
+ */
+router.get("/departments/:department/students", async (req, res) => {
+  try {
+    const students = await UserModel.getStudentsByDepartment(
+      req.params.department
+    );
+
+    res.json({
+      success: true,
+      count: students.length,
+      students,
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: "Failed to fetch students",
+      message: error.message,
+    });
+  }
+});
+
 module.exports = router;

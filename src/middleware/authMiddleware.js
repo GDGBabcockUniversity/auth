@@ -107,9 +107,46 @@ const optionalAuth = (req, res, next) => {
   next();
 };
 
+/**
+ * Middleware to check if user has agreed to TOS
+ * Use this for endpoints that require TOS agreement
+ */
+const requireTOSAgreement = async (req, res, next) => {
+  if (!req.user) {
+    return res.status(401).json({
+      success: false,
+      error: "Authentication required",
+    });
+  }
+
+  try {
+    const UserModel = require("../models/userModel");
+    const hasAgreed = await UserModel.hasTOSAgreed(req.user.user_id);
+
+    if (!hasAgreed) {
+      return res.status(403).json({
+        success: false,
+        error: "TOS agreement required",
+        message:
+          "You must agree to the Terms of Service to access this resource",
+        redirect: "/tos/agree",
+      });
+    }
+
+    next();
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      error: "Failed to verify TOS agreement",
+      message: error.message,
+    });
+  }
+};
+
 module.exports = {
   authenticateToken,
   requireRole,
   requireGDGMember,
+  requireTOSAgreement,
   optionalAuth,
 };

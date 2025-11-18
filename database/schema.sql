@@ -1,23 +1,45 @@
 -- Auth Service Database Schema
 -- Central user storage for SSO across all platform services
 
--- Enable UUID extension
-CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+-- Enable UUID extension (using pgcrypto for gen_random_uuid)
+CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 
 -- Users table - Central source of truth for all user data
 CREATE TABLE IF NOT EXISTS users (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  firebase_uid VARCHAR(128) UNIQUE NOT NULL,
-  email VARCHAR(255) UNIQUE NOT NULL,
-  name VARCHAR(255),
-  display_name VARCHAR(255),
-  photo_url TEXT,
-  email_verified BOOLEAN DEFAULT FALSE,
-  phone_number VARCHAR(20),
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  firebase_uid TEXT UNIQUE NOT NULL,
   
-  -- Custom platform fields
-  gdg_member BOOLEAN DEFAULT FALSE,
-  roles TEXT[] DEFAULT ARRAY['user']::TEXT[],
+  -- Basic user info
+  email TEXT UNIQUE NOT NULL,
+  full_name TEXT,
+  whatsapp_number TEXT,
+  avatar_url TEXT,
+  email_verified BOOLEAN DEFAULT FALSE,
+  
+  -- Personal details
+  gender TEXT,
+  birthday TEXT,
+  
+  -- Student information (for GDG Babcock)
+  student_status TEXT, -- e.g., "undergraduate", "postgraduate", "alumni"
+  matric_no TEXT,
+  department TEXT,
+  faculty TEXT,
+  
+  -- GDG tracks and skills
+  primary_track TEXT, -- e.g., "web", "mobile", "cloud", "ai/ml"
+  secondary_track TEXT,
+  primary_skill_level TEXT, -- e.g., "beginner", "intermediate", "advanced"
+  secondary_skill_level TEXT,
+  teams TEXT[] DEFAULT '{}', -- Teams user belongs to
+  
+  -- Platform fields
+  roles TEXT[] DEFAULT ARRAY['user']::TEXT[], -- "user", "admin", "moderator", "lead"
+  
+  -- Terms of Service
+  tos_agreed BOOLEAN DEFAULT FALSE,
+  tos_agreed_at TIMESTAMP WITH TIME ZONE,
+  tos_version TEXT,
   
   -- Metadata
   created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
@@ -31,24 +53,24 @@ CREATE TABLE IF NOT EXISTS users (
 
 -- Refresh tokens table - Track active refresh tokens
 CREATE TABLE IF NOT EXISTS refresh_tokens (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  token_hash VARCHAR(255) NOT NULL,
+  token_hash TEXT NOT NULL,
   expires_at TIMESTAMP WITH TIME ZONE NOT NULL,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
   revoked_at TIMESTAMP WITH TIME ZONE,
   is_active BOOLEAN DEFAULT TRUE,
   
-  -- Track where token was issued
+  -- Track where token was issued (for security)
   ip_address INET,
   user_agent TEXT
 );
 
 -- User sessions table - Optional session tracking
 CREATE TABLE IF NOT EXISTS user_sessions (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  session_token VARCHAR(255) UNIQUE NOT NULL,
+  session_token TEXT UNIQUE NOT NULL,
   expires_at TIMESTAMP WITH TIME ZONE NOT NULL,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
   last_activity_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
@@ -61,9 +83,9 @@ CREATE TABLE IF NOT EXISTS user_sessions (
 
 -- Audit log for important auth events
 CREATE TABLE IF NOT EXISTS auth_audit_log (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id UUID REFERENCES users(id) ON DELETE SET NULL,
-  event_type VARCHAR(50) NOT NULL,
+  event_type TEXT NOT NULL, -- "login", "logout", "signup", "profile_update", "role_change", etc.
   event_data JSONB,
   ip_address INET,
   user_agent TEXT,
@@ -113,8 +135,11 @@ $$ LANGUAGE plpgsql;
 COMMENT ON TABLE users IS 'Central user table - single source of truth for all platform services';
 COMMENT ON COLUMN users.firebase_uid IS 'Firebase UID - links to Firebase Auth identity';
 COMMENT ON COLUMN users.id IS 'Internal user ID - used across all platform services';
-COMMENT ON COLUMN users.gdg_member IS 'Whether user is a GDG Babcock member';
-COMMENT ON COLUMN users.roles IS 'User roles for authorization (user, admin, moderator, etc.)';
+COMMENT ON COLUMN users.teams IS 'Teams user belongs to (e.g., organizing team, tech team)';
+COMMENT ON COLUMN users.roles IS 'User roles for authorization (user, admin, moderator, lead, etc.)';
+COMMENT ON COLUMN users.primary_track IS 'User primary focus track (web, mobile, cloud, ai/ml, etc.)';
+COMMENT ON COLUMN users.student_status IS 'Student status (undergraduate, postgraduate, alumni)';
+COMMENT ON COLUMN users.tos_agreed IS 'Whether user has agreed to Terms of Service';
 COMMENT ON TABLE refresh_tokens IS 'Refresh tokens for JWT rotation';
 COMMENT ON TABLE auth_audit_log IS 'Audit trail for security and compliance';
 

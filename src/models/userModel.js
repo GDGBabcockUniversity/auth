@@ -52,26 +52,50 @@ class UserModel {
     const {
       firebaseUid,
       email,
-      name,
-      displayName,
-      photoUrl,
+      fullName,
+      avatarUrl,
       emailVerified,
-      phoneNumber,
+      whatsappNumber,
+      // Optional fields
+      gender,
+      birthday,
+      studentStatus,
+      matricNo,
+      department,
+      faculty,
+      primaryTrack,
+      secondaryTrack,
+      primarySkillLevel,
+      secondarySkillLevel,
+      teams,
     } = userData;
 
     const result = await query(
       `INSERT INTO users 
-        (firebase_uid, email, name, display_name, photo_url, email_verified, phone_number, last_login_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, CURRENT_TIMESTAMP)
+        (firebase_uid, email, full_name, avatar_url, email_verified, whatsapp_number,
+         gender, birthday, student_status, matric_no, department, faculty,
+         primary_track, secondary_track, primary_skill_level, secondary_skill_level,
+         teams, last_login_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, CURRENT_TIMESTAMP)
        RETURNING *`,
       [
         firebaseUid,
         email,
-        name,
-        displayName,
-        photoUrl,
-        emailVerified,
-        phoneNumber,
+        fullName || email.split("@")[0],
+        avatarUrl,
+        emailVerified || false,
+        whatsappNumber,
+        gender,
+        birthday,
+        studentStatus,
+        matricNo,
+        department,
+        faculty,
+        primaryTrack,
+        secondaryTrack,
+        primarySkillLevel,
+        secondarySkillLevel,
+        teams || [],
       ]
     );
 
@@ -86,13 +110,25 @@ class UserModel {
    */
   static async update(userId, updates) {
     const allowedFields = [
-      "name",
-      "display_name",
-      "photo_url",
+      "full_name",
+      "whatsapp_number",
+      "avatar_url",
       "email_verified",
-      "phone_number",
-      "gdg_member",
+      "gender",
+      "birthday",
+      "student_status",
+      "matric_no",
+      "department",
+      "faculty",
+      "primary_track",
+      "secondary_track",
+      "primary_skill_level",
+      "secondary_skill_level",
+      "teams",
       "roles",
+      "tos_agreed",
+      "tos_agreed_at",
+      "tos_version",
     ];
     const updateFields = [];
     const values = [];
@@ -152,8 +188,11 @@ class UserModel {
   static async getProfile(userId) {
     const result = await query(
       `SELECT 
-        id, email, name, display_name, photo_url, email_verified,
-        phone_number, gdg_member, roles, created_at, last_login_at
+        id, firebase_uid, email, full_name, whatsapp_number, avatar_url, email_verified,
+        gender, birthday, student_status, matric_no, department, faculty,
+        primary_track, secondary_track, primary_skill_level, secondary_skill_level,
+        teams, roles, tos_agreed, tos_agreed_at, tos_version,
+        created_at, updated_at, last_login_at
        FROM users 
        WHERE id = $1 AND is_active = TRUE`,
       [userId]
@@ -201,6 +240,106 @@ class UserModel {
       "UPDATE users SET roles = array_remove(roles, $2) WHERE id = $1",
       [userId, role]
     );
+  }
+
+  /**
+   * Add team to user
+   * @param {string} userId - Internal user ID
+   * @param {string} team - Team to add
+   */
+  static async addTeam(userId, team) {
+    await query(
+      `UPDATE users 
+       SET teams = array_append(teams, $2)
+       WHERE id = $1 AND NOT ($2 = ANY(teams))`,
+      [userId, team]
+    );
+  }
+
+  /**
+   * Remove team from user
+   * @param {string} userId - Internal user ID
+   * @param {string} team - Team to remove
+   */
+  static async removeTeam(userId, team) {
+    await query(
+      "UPDATE users SET teams = array_remove(teams, $2) WHERE id = $1",
+      [userId, team]
+    );
+  }
+
+  /**
+   * Check if user has agreed to TOS
+   * @param {string} userId - Internal user ID
+   * @returns {boolean} True if user has agreed to current TOS
+   */
+  static async hasTOSAgreed(userId) {
+    const result = await query(
+      "SELECT tos_agreed FROM users WHERE id = $1 AND is_active = TRUE",
+      [userId]
+    );
+
+    if (!result.rows[0]) return false;
+    return result.rows[0].tos_agreed;
+  }
+
+  /**
+   * Record TOS agreement
+   * @param {string} userId - Internal user ID
+   * @param {string} version - TOS version
+   */
+  static async recordTOSAgreement(userId, version) {
+    await query(
+      `UPDATE users 
+       SET tos_agreed = TRUE, tos_agreed_at = CURRENT_TIMESTAMP, tos_version = $2
+       WHERE id = $1`,
+      [userId, version]
+    );
+  }
+
+  /**
+   * Get users by track
+   * @param {string} track - Track name
+   * @returns {Array} Users with that track
+   */
+  static async getUsersByTrack(track) {
+    const result = await query(
+      `SELECT id, email, full_name, primary_track, secondary_track, primary_skill_level
+       FROM users 
+       WHERE (primary_track = $1 OR secondary_track = $1) AND is_active = TRUE`,
+      [track]
+    );
+    return result.rows;
+  }
+
+  /**
+   * Get users by team
+   * @param {string} team - Team name
+   * @returns {Array} Users in that team
+   */
+  static async getUsersByTeam(team) {
+    const result = await query(
+      `SELECT id, email, full_name, teams, roles
+       FROM users 
+       WHERE $1 = ANY(teams) AND is_active = TRUE`,
+      [team]
+    );
+    return result.rows;
+  }
+
+  /**
+   * Get students by department
+   * @param {string} department - Department name
+   * @returns {Array} Students in that department
+   */
+  static async getStudentsByDepartment(department) {
+    const result = await query(
+      `SELECT id, email, full_name, matric_no, department, faculty, student_status
+       FROM users 
+       WHERE department = $1 AND is_active = TRUE`,
+      [department]
+    );
+    return result.rows;
   }
 }
 

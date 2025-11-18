@@ -136,8 +136,12 @@ class AuthController {
       delete updates.id;
       delete updates.firebase_uid;
       delete updates.email;
-      delete updates.roles;
-      delete updates.gdg_member;
+      delete updates.roles; // Roles can only be changed by admins
+      delete updates.created_at;
+      delete updates.updated_at;
+      delete updates.last_login_at;
+      delete updates.is_active;
+      delete updates.deleted_at;
 
       const updatedUser = await UserModel.update(userId, updates);
 

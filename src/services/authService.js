@@ -24,9 +24,9 @@ class AuthService {
         uid: firebaseUid,
         email,
         name,
-        picture: photoUrl,
+        picture: avatarUrl,
         email_verified: emailVerified,
-        phone_number: phoneNumber,
+        phone_number: whatsappNumber,
       } = decodedToken;
 
       // Find or create user in our database
@@ -37,11 +37,10 @@ class AuthService {
         user = await UserModel.create({
           firebaseUid,
           email,
-          name: name || email.split("@")[0],
-          displayName: name || email.split("@")[0],
-          photoUrl,
+          fullName: name || email.split("@")[0],
+          avatarUrl,
           emailVerified: emailVerified || false,
-          phoneNumber,
+          whatsappNumber,
         });
 
         // Log user creation
@@ -73,9 +72,11 @@ class AuthService {
       const accessToken = generateAccessToken({
         user_id: user.id,
         email: user.email,
-        name: user.name,
+        full_name: user.full_name,
         roles: user.roles,
-        gdg_member: user.gdg_member,
+        teams: user.teams || [],
+        primary_track: user.primary_track,
+        student_status: user.student_status,
       });
 
       const refreshToken = generateRefreshToken({
@@ -91,12 +92,16 @@ class AuthService {
         user: {
           id: user.id,
           email: user.email,
-          name: user.name,
-          display_name: user.display_name,
-          photo_url: user.photo_url,
+          full_name: user.full_name,
+          avatar_url: user.avatar_url,
+          whatsapp_number: user.whatsapp_number,
           email_verified: user.email_verified,
-          gdg_member: user.gdg_member,
+          student_status: user.student_status,
+          primary_track: user.primary_track,
+          secondary_track: user.secondary_track,
+          teams: user.teams || [],
           roles: user.roles,
+          tos_agreed: user.tos_agreed,
         },
         tokens: {
           access_token: accessToken,
@@ -130,7 +135,7 @@ class AuthService {
 
       // Check if refresh token exists and is active in database
       const tokenResult = await query(
-        `SELECT rt.*, u.email, u.name, u.roles, u.gdg_member
+        `SELECT rt.*, u.email, u.full_name, u.roles, u.teams, u.primary_track, u.student_status
          FROM refresh_tokens rt
          JOIN users u ON rt.user_id = u.id
          WHERE rt.token_hash = $1 AND rt.is_active = TRUE AND rt.expires_at > CURRENT_TIMESTAMP`,
@@ -147,9 +152,11 @@ class AuthService {
       const accessToken = generateAccessToken({
         user_id: tokenData.user_id,
         email: tokenData.email,
-        name: tokenData.name,
+        full_name: tokenData.full_name,
         roles: tokenData.roles,
-        gdg_member: tokenData.gdg_member,
+        teams: tokenData.teams || [],
+        primary_track: tokenData.primary_track,
+        student_status: tokenData.student_status,
       });
 
       return {
