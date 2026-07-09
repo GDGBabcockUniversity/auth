@@ -7,6 +7,7 @@ const { pool } = require("./src/config/database");
 
 // Import routes
 const authRoutes = require("./src/routes/authRoutes");
+const eventRoutes = require("./src/routes/eventRoutes");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -43,6 +44,7 @@ app.use(express.json());
 
 // Routes
 app.use("/auth", authRoutes);
+app.use("/events", eventRoutes);
 
 // Health check endpoint
 app.get("/health", (req, res) => {
