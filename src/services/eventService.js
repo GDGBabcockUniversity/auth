@@ -1,4 +1,6 @@
 const EventModel = require("../models/eventModel");
+const UserModel = require("../models/userModel");
+const CertificateService = require("./certificateService");
 
 const VALID_STATUSES = ["draft", "published", "ended", "cancelled"];
 const VALID_CERT_TYPES = ["participation", "completion"];
@@ -130,10 +132,12 @@ class EventService {
   }
 
   /**
-   * Records attendance and creates/returns the certificate row.
-   * Certificate issuance (calling the cert service) is wired in on top of
-   * this by certificateService.js — see the try/catch there for the
-   * non-blocking, retry-on-recheck-in behavior.
+   * Records attendance, then issues (or retries) the certificate.
+   * Check-in itself always succeeds even if certificate issuance fails or
+   * the cert service is unreachable — CertificateService.issue() never
+   * throws, it just leaves the row 'failed' for a later retry. Re-checking
+   * in an already-checked-in user re-attempts issuance for any certificate
+   * that isn't already 'issued'.
    */
   static async checkIn(eventId, userId, adminId) {
     const event = await EventModel.findById(eventId);
@@ -146,6 +150,23 @@ class EventService {
     } — ${event.title}`;
 
     const certificate = await EventModel.checkIn(eventId, userId, adminId, certTitle);
+
+    if (certificate.status !== "issued") {
+      const user = await UserModel.findById(userId);
+      const issueResult = await CertificateService.issue({
+        certId: certificate.id,
+        participantName: user ? user.full_name : null,
+        eventTitle: event.title,
+        certificateType: event.certificate_type,
+      });
+      certificate.status = issueResult.status;
+      if (issueResult.status === "issued") {
+        certificate.cert_service_unique_id = issueResult.cert_service_unique_id;
+        certificate.download_url = issueResult.download_url;
+        certificate.issued_at = new Date().toISOString();
+      }
+    }
+
     return { certificate, event };
   }
 }

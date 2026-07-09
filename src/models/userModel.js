@@ -116,6 +116,18 @@ class UserModel {
   }
 
   /**
+   * Find user by internal ID (minimal fields)
+   * @param {string} userId - Internal user ID
+   * @returns {Object|null} User with id/full_name or null
+   */
+  static async findById(userId) {
+    const result = await query("SELECT id, full_name FROM users WHERE id = $1", [
+      userId,
+    ]);
+    return result.rows[0] || null;
+  }
+
+  /**
    * Get public user profile
    * @param {string} userId - Internal user ID
    * @returns {Object} User profile
