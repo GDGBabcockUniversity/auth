@@ -1,4 +1,5 @@
 const { query } = require("../config/database");
+const RadarModel = require("./radarModel");
 
 /**
  * User Model - Database operations for users (Simplified)
@@ -143,19 +144,27 @@ class UserModel {
   }
 
   /**
-   * Get the profile's Activity tile data. Only events_attended is backed by
-   * real data so far (Phase 1 = events only); stars/streak/radar_* stay
-   * omitted so the website's getActivity() falls back to its "—" placeholder
-   * for fields no service writes yet (see lib/member.ts on GDGWebsite).
+   * Get the profile's Activity tile data. events_attended (Phase 1) and
+   * radar_articles_read / radar_reading_minutes (Phase 2) are backed by real
+   * data; stars/streak stay omitted so the website's getActivity() falls
+   * back to its "—" placeholder for fields no service writes yet (see
+   * lib/member.ts on GDGWebsite).
    * @param {string} userId - Internal user ID
-   * @returns {Object} { events_attended }
+   * @returns {Object} { events_attended, radar_articles_read, radar_reading_minutes }
    */
   static async getActivity(userId) {
-    const result = await query(
-      "SELECT COUNT(*)::int AS events_attended FROM event_checkins WHERE user_id = $1",
-      [userId]
-    );
-    return { events_attended: result.rows[0].events_attended };
+    const [eventsResult, radarActivity] = await Promise.all([
+      query(
+        "SELECT COUNT(*)::int AS events_attended FROM event_checkins WHERE user_id = $1",
+        [userId]
+      ),
+      RadarModel.getReadingActivity(userId),
+    ]);
+    return {
+      events_attended: eventsResult.rows[0].events_attended,
+      radar_articles_read: radarActivity.radar_articles_read,
+      radar_reading_minutes: radarActivity.radar_reading_minutes,
+    };
   }
 
   /**
