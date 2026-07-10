@@ -28,16 +28,39 @@ class UserModel {
   }
 
   /**
-   * Create new user
-   * @param {Object} userData - User data from Firebase
+   * Create new user. Accepts the Firebase-derived identity fields plus
+   * optional seed-data fields (see getSeedProfile) — all seed columns
+   * already exist on `users`, so a first-login prefill is one INSERT, not
+   * a create-then-update.
+   * @param {Object} userData - User data from Firebase + optional seed data
    * @returns {Object} Created user object
    */
   static async create(userData) {
-    const { firebaseUid, email, fullName, avatarUrl, emailVerified } = userData;
+    const {
+      firebaseUid,
+      email,
+      fullName,
+      avatarUrl,
+      emailVerified,
+      whatsappNumber,
+      gender,
+      birthday,
+      studentStatus,
+      matricNo,
+      department,
+      faculty,
+      primaryTrack,
+      secondaryTrack,
+      primarySkillLevel,
+    } = userData;
 
     const result = await query(
-      `INSERT INTO users (firebase_uid, email, full_name, avatar_url, email_verified, last_login_at)
-       VALUES ($1, $2, $3, $4, $5, CURRENT_TIMESTAMP)
+      `INSERT INTO users (
+         firebase_uid, email, full_name, avatar_url, email_verified, last_login_at,
+         whatsapp_number, gender, birthday, student_status, matric_no,
+         department, faculty, primary_track, secondary_track, primary_skill_level
+       )
+       VALUES ($1, $2, $3, $4, $5, CURRENT_TIMESTAMP, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
        RETURNING *`,
       [
         firebaseUid,
@@ -45,10 +68,35 @@ class UserModel {
         fullName || email.split("@")[0],
         avatarUrl,
         emailVerified || false,
+        whatsappNumber || null,
+        gender || null,
+        birthday || null,
+        studentStatus || null,
+        matricNo || null,
+        department || null,
+        faculty || null,
+        primaryTrack || null,
+        secondaryTrack || null,
+        primarySkillLevel || null,
       ]
     );
 
     return result.rows[0];
+  }
+
+  /**
+   * Look up first-login autofill data by email (see database/migrations/004_team.sql).
+   * Replaces the old client-side lookup that shipped 230 members' seed data
+   * (whatsapp numbers, birthdays, ...) in the public JS bundle.
+   * @param {string} email - User email
+   * @returns {Object|null} Seed profile fields, or null if none on file
+   */
+  static async getSeedProfile(email) {
+    const result = await query(
+      "SELECT profile FROM member_seed_data WHERE email = $1",
+      [email.toLowerCase().trim()]
+    );
+    return result.rows[0]?.profile || null;
   }
 
   /**
