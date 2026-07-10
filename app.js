@@ -9,6 +9,7 @@ const { pool } = require("./src/config/database");
 const authRoutes = require("./src/routes/authRoutes");
 const eventRoutes = require("./src/routes/eventRoutes");
 const radarRoutes = require("./src/routes/radarRoutes");
+const teamRoutes = require("./src/routes/teamRoutes");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -47,6 +48,7 @@ app.use(express.json());
 app.use("/auth", authRoutes);
 app.use("/events", eventRoutes);
 app.use("/radar", radarRoutes);
+app.use("/team", teamRoutes);
 
 // Health check endpoint
 app.get("/health", (req, res) => {
