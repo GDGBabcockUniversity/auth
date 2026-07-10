@@ -109,9 +109,10 @@ class AuthController {
         });
       }
 
-      const [activity, certificates] = await Promise.all([
+      const [activity, certificates, teamMembership] = await Promise.all([
         UserModel.getActivity(userId),
         UserModel.getCertificates(userId),
+        UserModel.getTeamMembership(userId),
       ]);
 
       res.json({
@@ -120,6 +121,7 @@ class AuthController {
           ...user,
           activity,
           certificates,
+          team_membership: teamMembership,
         },
       });
     } catch (error) {

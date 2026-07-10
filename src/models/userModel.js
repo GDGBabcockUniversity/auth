@@ -300,6 +300,22 @@ class UserModel {
   }
 
   /**
+   * Team roster membership for the profile page's volunteer badge — only
+   * returns a linked, still-public team_members row.
+   * @param {string} userId - Internal user ID
+   * @returns {Object|null} { role, section, subteam } or null
+   */
+  static async getTeamMembership(userId) {
+    const result = await query(
+      `SELECT role, section, subteam FROM team_members
+       WHERE user_id = $1 AND is_public = TRUE
+       LIMIT 1`,
+      [userId]
+    );
+    return result.rows[0] || null;
+  }
+
+  /**
    * Get issued certificates shaped to match GDGWebsite's MemberCertificate
    * type exactly: { id, title, event, issued_at, url }.
    * @param {string} userId - Internal user ID
