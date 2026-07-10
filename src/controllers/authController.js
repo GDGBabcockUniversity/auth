@@ -109,9 +109,18 @@ class AuthController {
         });
       }
 
+      const [activity, certificates] = await Promise.all([
+        UserModel.getActivity(userId),
+        UserModel.getCertificates(userId),
+      ]);
+
       res.json({
         success: true,
-        user,
+        user: {
+          ...user,
+          activity,
+          certificates,
+        },
       });
     } catch (error) {
       console.error("Get current user error:", error);

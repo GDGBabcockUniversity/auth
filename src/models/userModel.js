@@ -135,11 +135,45 @@ class UserModel {
   static async getProfile(userId) {
     const result = await query(
       `SELECT id, email, full_name, avatar_url, student_status, primary_track, teams, roles, tos_agreed, created_at
-       FROM users 
+       FROM users
        WHERE id = $1`,
       [userId]
     );
     return result.rows[0] || null;
+  }
+
+  /**
+   * Get the profile's Activity tile data. Only events_attended is backed by
+   * real data so far (Phase 1 = events only); stars/streak/radar_* stay
+   * omitted so the website's getActivity() falls back to its "—" placeholder
+   * for fields no service writes yet (see lib/member.ts on GDGWebsite).
+   * @param {string} userId - Internal user ID
+   * @returns {Object} { events_attended }
+   */
+  static async getActivity(userId) {
+    const result = await query(
+      "SELECT COUNT(*)::int AS events_attended FROM event_checkins WHERE user_id = $1",
+      [userId]
+    );
+    return { events_attended: result.rows[0].events_attended };
+  }
+
+  /**
+   * Get issued certificates shaped to match GDGWebsite's MemberCertificate
+   * type exactly: { id, title, event, issued_at, url }.
+   * @param {string} userId - Internal user ID
+   * @returns {Array} Certificates, most recently issued first
+   */
+  static async getCertificates(userId) {
+    const result = await query(
+      `SELECT c.id, c.title, e.title AS event, c.issued_at, c.download_url AS url
+       FROM certificates c
+       LEFT JOIN events e ON e.id = c.event_id
+       WHERE c.user_id = $1 AND c.status = 'issued'
+       ORDER BY c.issued_at DESC`,
+      [userId]
+    );
+    return result.rows;
   }
 }
 
