@@ -154,6 +154,90 @@ class UserModel {
   }
 
   /**
+   * Admin-only update — a separate, narrower allowlist from the self-serve
+   * `update` above. Only an admin-gated route may call this.
+   * @param {string} userId - Internal user ID
+   * @param {Object} updates - Subset of { roles, teams, is_active }
+   * @returns {Object|null} Updated user object, or null if not found
+   */
+  static async adminUpdate(userId, updates) {
+    const allowedFields = ["roles", "teams", "is_active"];
+    const updateFields = [];
+    const values = [];
+    let paramIndex = 1;
+
+    Object.keys(updates).forEach((key) => {
+      if (allowedFields.includes(key)) {
+        updateFields.push(`${key} = $${paramIndex}`);
+        values.push(updates[key]);
+        paramIndex++;
+      }
+    });
+
+    if (updateFields.length === 0) {
+      throw new Error("No valid fields to update");
+    }
+
+    values.push(userId);
+    const result = await query(
+      `UPDATE users
+       SET ${updateFields.join(", ")}, updated_at = CURRENT_TIMESTAMP
+       WHERE id = $${paramIndex}
+       RETURNING id, email, full_name, avatar_url, roles, teams, is_active, created_at, last_login_at`,
+      values
+    );
+
+    return result.rows[0] || null;
+  }
+
+  /**
+   * Admin roster search/list — paginated, optionally filtered by name/email
+   * substring and/or a single role.
+   * @param {Object} opts - { search, role, page, limit }
+   * @returns {Object} { users, total, page, limit }
+   */
+  static async adminList({ search, role, page = 1, limit = 20 } = {}) {
+    const conditions = [];
+    const values = [];
+    let paramIndex = 1;
+
+    if (search) {
+      conditions.push(`(full_name ILIKE $${paramIndex} OR email ILIKE $${paramIndex})`);
+      values.push(`%${search}%`);
+      paramIndex++;
+    }
+    if (role) {
+      conditions.push(`$${paramIndex} = ANY(roles)`);
+      values.push(role);
+      paramIndex++;
+    }
+
+    const whereClause = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
+    const safeLimit = Math.min(Math.max(parseInt(limit, 10) || 20, 1), 100);
+    const safePage = Math.max(parseInt(page, 10) || 1, 1);
+    const offset = (safePage - 1) * safeLimit;
+
+    const [rowsResult, countResult] = await Promise.all([
+      query(
+        `SELECT id, email, full_name, avatar_url, roles, teams, is_active, created_at, last_login_at
+         FROM users
+         ${whereClause}
+         ORDER BY created_at DESC
+         LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`,
+        [...values, safeLimit, offset]
+      ),
+      query(`SELECT COUNT(*)::int AS total FROM users ${whereClause}`, values),
+    ]);
+
+    return {
+      users: rowsResult.rows,
+      total: countResult.rows[0].total,
+      page: safePage,
+      limit: safeLimit,
+    };
+  }
+
+  /**
    * Update last login timestamp
    * @param {string} userId - Internal user ID
    */
