@@ -44,3 +44,8 @@ coverage/
 # Temp
 tmp/
 temp/
+
+# One-time migration data — contains member PII (WhatsApp numbers,
+# birthdays), never committed. Regenerate locally with
+# GDGWebsite/scripts/export-legacy-data.mjs before running import-legacy-data.js.
+scripts/data/

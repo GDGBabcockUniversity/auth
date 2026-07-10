@@ -32,14 +32,41 @@ class AuthService {
       let user = await UserModel.findByFirebaseUid(firebaseUid);
 
       if (!user) {
-        // Create new user
-        user = await UserModel.create({
-          firebaseUid,
-          email,
-          fullName: name,
-          avatarUrl,
-          emailVerified,
-        });
+        // First-ever login: prefill from member_seed_data (if this email is
+        // a known GDG Babcock member) before the single INSERT. Firebase's
+        // own claims still win where present — the seed sheet only fills
+        // gaps, same as the old client-side behavior.
+        const seedProfile = (await UserModel.getSeedProfile(email)) || {};
+
+        try {
+          user = await UserModel.create({
+            firebaseUid,
+            email,
+            fullName: name || seedProfile.full_name,
+            avatarUrl,
+            emailVerified,
+            whatsappNumber: seedProfile.whatsapp_number,
+            gender: seedProfile.gender,
+            birthday: seedProfile.birthday,
+            studentStatus: seedProfile.student_status,
+            matricNo: seedProfile.matric_no,
+            department: seedProfile.department,
+            faculty: seedProfile.faculty,
+            primaryTrack: seedProfile.primary_track,
+            secondaryTrack: seedProfile.secondary_track,
+            primarySkillLevel: seedProfile.primary_skill_level,
+          });
+        } catch (createError) {
+          // Two tabs racing a first login can both pass the check above and
+          // both attempt the INSERT; the loser hits the firebase_uid/email
+          // UNIQUE constraint. Recover by reading the row the winner created.
+          if (createError.code === "23505") {
+            user = await UserModel.findByFirebaseUid(firebaseUid);
+            if (!user) throw createError;
+          } else {
+            throw createError;
+          }
+        }
       } else {
         // Update last login
         await UserModel.updateLastLogin(user.id);
