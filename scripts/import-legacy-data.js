@@ -11,6 +11,15 @@ const TeamModel = require("../src/models/teamModel");
 
 async function importMemberSeedData() {
   const filePath = path.join(__dirname, "data", "member-seed-data.json");
+  // The seed file carries PII and is gitignored, so a fresh clone won't have
+  // it — the team roster (committed) must still import without it. Regenerate
+  // with GDGWebsite/scripts/regen-seed-json.mjs when the seed import matters.
+  if (!fs.existsSync(filePath)) {
+    console.log(
+      "  member-seed-data.json not found — skipping seed import (team roster still imported)."
+    );
+    return 0;
+  }
   const data = JSON.parse(fs.readFileSync(filePath, "utf8"));
   const entries = Object.entries(data);
 
