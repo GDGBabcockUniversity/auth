@@ -32,48 +32,73 @@ class AuthService {
       let user = await UserModel.findByFirebaseUid(firebaseUid);
 
       if (!user) {
-        // First-ever login: prefill from member_seed_data (if this email is
-        // a known GDG Babcock member) before the single INSERT. Firebase's
-        // own claims still win where present — the seed sheet only fills
-        // gaps, same as the old client-side behavior.
-        //
-        // The prefill is an optimization and must NEVER block signup: a
-        // missing table (unapplied migration) or any other lookup failure
-        // just means an unprefilled profile, not a failed account.
-        let seedProfile = {};
-        try {
-          seedProfile = (await UserModel.getSeedProfile(email)) || {};
-        } catch (seedError) {
-          console.error("Seed-profile lookup failed (continuing without prefill):", seedError.message);
-        }
+        // Firebase treats email/password and Google (etc.) as separate,
+        // unlinked identities for the same email address. A member who
+        // signed up one way and is now signing in a different way has no
+        // row under THIS firebase_uid yet, but already has one under the
+        // email — relink rather than attempting a doomed INSERT that would
+        // hit the email UNIQUE constraint and surface as a raw DB error.
+        const existingByEmail = await UserModel.findByEmail(email);
+        if (existingByEmail) {
+          user = await UserModel.relinkFirebaseUid(existingByEmail.id, firebaseUid);
+          console.log(
+            `Relinked Firebase identity for user ${existingByEmail.id} (existing email, new provider)`
+          );
+        } else {
+          // First-ever login: prefill from member_seed_data (if this email
+          // is a known GDG Babcock member) before the single INSERT.
+          // Firebase's own claims still win where present — the seed sheet
+          // only fills gaps, same as the old client-side behavior.
+          //
+          // The prefill is an optimization and must NEVER block signup: a
+          // missing table (unapplied migration) or any other lookup
+          // failure just means an unprefilled profile, not a failed
+          // account.
+          let seedProfile = {};
+          try {
+            seedProfile = (await UserModel.getSeedProfile(email)) || {};
+          } catch (seedError) {
+            console.error("Seed-profile lookup failed (continuing without prefill):", seedError.message);
+          }
 
-        try {
-          user = await UserModel.create({
-            firebaseUid,
-            email,
-            fullName: name || seedProfile.full_name,
-            avatarUrl,
-            emailVerified,
-            whatsappNumber: seedProfile.whatsapp_number,
-            gender: seedProfile.gender,
-            birthday: seedProfile.birthday,
-            studentStatus: seedProfile.student_status,
-            matricNo: seedProfile.matric_no,
-            department: seedProfile.department,
-            faculty: seedProfile.faculty,
-            primaryTrack: seedProfile.primary_track,
-            secondaryTrack: seedProfile.secondary_track,
-            primarySkillLevel: seedProfile.primary_skill_level,
-          });
-        } catch (createError) {
-          // Two tabs racing a first login can both pass the check above and
-          // both attempt the INSERT; the loser hits the firebase_uid/email
-          // UNIQUE constraint. Recover by reading the row the winner created.
-          if (createError.code === "23505") {
-            user = await UserModel.findByFirebaseUid(firebaseUid);
-            if (!user) throw createError;
-          } else {
-            throw createError;
+          try {
+            user = await UserModel.create({
+              firebaseUid,
+              email,
+              fullName: name || seedProfile.full_name,
+              avatarUrl,
+              emailVerified,
+              whatsappNumber: seedProfile.whatsapp_number,
+              gender: seedProfile.gender,
+              birthday: seedProfile.birthday,
+              studentStatus: seedProfile.student_status,
+              matricNo: seedProfile.matric_no,
+              department: seedProfile.department,
+              faculty: seedProfile.faculty,
+              primaryTrack: seedProfile.primary_track,
+              secondaryTrack: seedProfile.secondary_track,
+              primarySkillLevel: seedProfile.primary_skill_level,
+            });
+          } catch (createError) {
+            // Two tabs racing a first login can both pass the checks above
+            // and both attempt the INSERT — but a 23505 here means EITHER
+            // constraint could have been the loser: firebase_uid (a same-
+            // provider double-tab race) or email (a different-provider
+            // race against the branch above). Branch on which one it
+            // actually was instead of assuming; re-querying by the wrong
+            // key just re-throws a raw DB error at the user.
+            if (createError.code === "23505") {
+              const violatedEmail = String(createError.constraint || "").includes("email");
+              user = violatedEmail
+                ? await UserModel.findByEmail(email)
+                : await UserModel.findByFirebaseUid(firebaseUid);
+              if (!user) throw createError;
+              if (violatedEmail) {
+                user = await UserModel.relinkFirebaseUid(user.id, firebaseUid);
+              }
+            } else {
+              throw createError;
+            }
           }
         }
       } else {

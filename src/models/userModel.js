@@ -100,6 +100,26 @@ class UserModel {
   }
 
   /**
+   * Point an existing account at a new Firebase identity. Firebase treats
+   * email/password and Google (etc.) as separate, unlinked identities for
+   * the same email address — when a member who signed up one way signs in
+   * a different way, this keeps them as the same platform account instead
+   * of colliding with the email UNIQUE constraint on a second INSERT.
+   * @param {string} userId - Internal user ID
+   * @param {string} firebaseUid - The new Firebase UID to link
+   * @returns {Object} Updated user object
+   */
+  static async relinkFirebaseUid(userId, firebaseUid) {
+    const result = await query(
+      `UPDATE users SET firebase_uid = $1, updated_at = CURRENT_TIMESTAMP
+       WHERE id = $2
+       RETURNING *`,
+      [firebaseUid, userId]
+    );
+    return result.rows[0];
+  }
+
+  /**
    * Update user information
    * @param {string} userId - Internal user ID
    * @param {Object} updates - Fields to update
