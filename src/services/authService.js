@@ -36,7 +36,16 @@ class AuthService {
         // a known GDG Babcock member) before the single INSERT. Firebase's
         // own claims still win where present — the seed sheet only fills
         // gaps, same as the old client-side behavior.
-        const seedProfile = (await UserModel.getSeedProfile(email)) || {};
+        //
+        // The prefill is an optimization and must NEVER block signup: a
+        // missing table (unapplied migration) or any other lookup failure
+        // just means an unprefilled profile, not a failed account.
+        let seedProfile = {};
+        try {
+          seedProfile = (await UserModel.getSeedProfile(email)) || {};
+        } catch (seedError) {
+          console.error("Seed-profile lookup failed (continuing without prefill):", seedError.message);
+        }
 
         try {
           user = await UserModel.create({
