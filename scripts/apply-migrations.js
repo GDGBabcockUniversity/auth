@@ -9,7 +9,7 @@ const fs = require("fs");
 const path = require("path");
 const { pool } = require("../src/config/database");
 
-const MIGRATIONS = ["002_events.sql", "003_radar.sql", "004_team.sql"];
+const MIGRATIONS = ["002_events.sql", "003_radar.sql", "004_team.sql", "005_wrapped.sql"];
 
 async function main() {
   for (const name of MIGRATIONS) {
